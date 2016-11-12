@@ -49,6 +49,11 @@ namespace AuthorizationServer.Api
         {
             return Int16.Parse(WebConfigurationManager.AppSettings["TokenExpirationMinutes"]);
         }
+
+        public static string GetFacebookAppToken()
+        {
+            return WebConfigurationManager.AppSettings["FacebookAppToken"];
+        }
     }
 
     public static class TaskExtensions
