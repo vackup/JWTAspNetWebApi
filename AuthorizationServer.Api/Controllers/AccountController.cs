@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using System.Web.Configuration;
 using System.Web.Http;
+using AuthorizationServer.Api.Formats;
 using AuthorizationServer.Api.Models;
 using Microsoft.AspNet.Identity;
 using Microsoft.AspNet.Identity.EntityFramework;
@@ -16,8 +18,9 @@ namespace AuthorizationServer.Api.Controllers
     [RoutePrefix("api/Account")]
     public class AccountController : ApiController
     {
-        private AuthRepository _repo = null;
-        private string _facebookAuthOptionsAppId = WebConfigurationManager.AppSettings["FacebookAppId"];
+        private readonly AuthRepository _repo = null;
+        private readonly string _facebookAuthOptionsAppId = WebConfigurationManager.AppSettings["FacebookAppId"];
+        private readonly string _tokenIssuer = WebConfigurationManager.AppSettings["TokenIssuer"];
 
         public AccountController()
         {
@@ -49,7 +52,7 @@ namespace AuthorizationServer.Api.Controllers
         [AllowAnonymous]
         [HttpGet]
         [Route("ObtainLocalAccessToken")]
-        public async Task<IHttpActionResult> ObtainLocalAccessToken(string provider, string externalAccessToken)
+        public async Task<IHttpActionResult> ObtainLocalAccessTokenAsync(string provider, string externalAccessToken, string clientId)
         {
 
             if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(externalAccessToken))
@@ -72,8 +75,11 @@ namespace AuthorizationServer.Api.Controllers
                 return BadRequest("External user is not registered");
             }
 
+            // TODO: get roles from database
+            var roleList = new List<string> { "Manager", "Supervisor" };
+
             //generate access token response
-            var accessTokenResponse = GenerateLocalAccessTokenResponse(user.UserName);
+            var accessTokenResponse = GenerateLocalAccessTokenResponse(user.UserName, roleList, clientId);
 
             return Ok(accessTokenResponse);
         }
@@ -138,36 +144,27 @@ namespace AuthorizationServer.Api.Controllers
             return parsedToken;
         }
 
-        private JObject GenerateLocalAccessTokenResponse(string userName)
+        private JObject GenerateLocalAccessTokenResponse(string userName, List<string> roleList, string clientId)
         {
-            throw new NotImplementedException();
-            //var tokenExpiration = TimeSpan.FromDays(1);
+            var tokenExpirationMinutes = Helper.GetTokenExpirationMinutes();
+            var tokenExpiration = TimeSpan.FromMinutes(tokenExpirationMinutes);
 
-            //ClaimsIdentity identity = new ClaimsIdentity(OAuthDefaults.AuthenticationType);
+            var ticket = Helper.GetJwtAuthenticationTicket(userName, roleList, clientId);
 
-            //identity.AddClaim(new Claim(ClaimTypes.Name, userName));
-            //identity.AddClaim(new Claim("role", "user"));
+            var customJwtFormat = new CustomJwtFormat(_tokenIssuer);
 
-            //var props = new AuthenticationProperties()
-            //{
-            //    IssuedUtc = DateTime.UtcNow,
-            //    ExpiresUtc = DateTime.UtcNow.Add(tokenExpiration),
-            //};
+            var accessToken = customJwtFormat.Protect(ticket);
 
-            //var ticket = new AuthenticationTicket(identity, props);
+            JObject tokenResponse = new JObject(
+                new JProperty("userName", userName),
+                new JProperty("access_token", accessToken),
+                new JProperty("token_type", "bearer"),
+                new JProperty("expires_in", tokenExpiration.TotalSeconds.ToString()),
+                new JProperty(".issued", ticket.Properties.IssuedUtc.ToString()),
+                new JProperty(".expires", ticket.Properties.ExpiresUtc.ToString())
+                );
 
-            //var accessToken = Startup.JwtBearerAuthenticationOptions.AccessTokenFormat.Protect(ticket);
-
-            //JObject tokenResponse = new JObject(
-            //    new JProperty("userName", userName),
-            //    new JProperty("access_token", accessToken),
-            //    new JProperty("token_type", "bearer"),
-            //    new JProperty("expires_in", tokenExpiration.TotalSeconds.ToString()),
-            //    new JProperty(".issued", ticket.Properties.IssuedUtc.ToString()),
-            //    new JProperty(".expires", ticket.Properties.ExpiresUtc.ToString())
-            //    );
-
-            //return tokenResponse;
+            return tokenResponse;
         }
 
         private IHttpActionResult GetErrorResult(IdentityResult result)

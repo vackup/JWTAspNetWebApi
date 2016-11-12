@@ -96,26 +96,18 @@ namespace AuthorizationServer.Api.Providers
                 return;
             }
 
-            var identity = new ClaimsIdentity("JWT");
-
-            identity.AddClaim(new Claim(ClaimTypes.Name, context.UserName));
-            identity.AddClaim(new Claim("sub", context.UserName));
+            var userName = context.UserName;
+            var clientId = context.ClientId ?? string.Empty;
 
             // TODO: get roles from database
-            identity.AddClaim(new Claim(ClaimTypes.Role, "Manager"));
-            identity.AddClaim(new Claim(ClaimTypes.Role, "Supervisor"));
+            var roleList = new List<string> { "Manager", "Supervisor" };
 
-            var props = new AuthenticationProperties(new Dictionary<string, string>
-                {
-                    {
-                         "audience", (context.ClientId == null) ? string.Empty : context.ClientId
-                    }
-                });
-
-            var ticket = new AuthenticationTicket(identity, props);
+            var ticket = Helper.GetJwtAuthenticationTicket(userName, roleList, clientId);
             context.Validated(ticket);
             return;
         }
+
+        
 
         public override Task GrantRefreshToken(OAuthGrantRefreshTokenContext context)
         {

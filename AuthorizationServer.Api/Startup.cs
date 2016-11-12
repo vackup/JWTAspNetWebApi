@@ -2,21 +2,19 @@
 using AuthorizationServer.Api.Providers;
 using Microsoft.Owin;
 using Microsoft.Owin.Security.OAuth;
-using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.DataHandler.Encoder;
 using Microsoft.Owin.Security.Jwt;
 using Owin;
 using System;
 using System.Threading.Tasks;
+using System.Web.Configuration;
 using System.Web.Http;
+using AuthenticationMode = Microsoft.Owin.Security.AuthenticationMode;
 
 namespace AuthorizationServer.Api
 {
     public class Startup
     {
-        //public static OAuthBearerAuthenticationOptions OAuthBearerOptions { get; private set; }
-        public static JwtBearerAuthenticationOptions JwtBearerAuthenticationOptions { get; private set; }
-
         public void Configuration(IAppBuilder app)
         {
             HttpConfiguration config = new HttpConfiguration();
@@ -39,7 +37,7 @@ namespace AuthorizationServer.Api
             var audience = "099153c2625149bc8ecb3e85e03f0022";
             var secret = TextEncodings.Base64Url.Decode("IxrAjDoa2FqElO7IhrSrUJELhUckePEPVpaePlS_Xaw");
 
-            JwtBearerAuthenticationOptions = new JwtBearerAuthenticationOptions
+            var jwtBearerAuthenticationOptions = new JwtBearerAuthenticationOptions
             {
                 AuthenticationMode = AuthenticationMode.Active,
                 AllowedAudiences = new[] {audience},
@@ -58,23 +56,25 @@ namespace AuthorizationServer.Api
             };
 
             // Api controllers with an [Authorize] attribute will be validated with JWT
-            app.UseJwtBearerAuthentication(JwtBearerAuthenticationOptions);
+            app.UseJwtBearerAuthentication(jwtBearerAuthenticationOptions);
 
         }
 
         public void ConfigureOAuth(IAppBuilder app)
         {
             //OAuthBearerOptions = new OAuthBearerAuthenticationOptions();
-            
+
+            var tokenExpirationMinutes = Helper.GetTokenExpirationMinutes();
+
             OAuthAuthorizationServerOptions OAuthServerOptions = new OAuthAuthorizationServerOptions()
             {
                 //For Dev enviroment only (on production should be AllowInsecureHttp = false)
                 AllowInsecureHttp = true,
                 TokenEndpointPath = new PathString("/oauth2/token"),
-                AccessTokenExpireTimeSpan = TimeSpan.FromMinutes(30),
+                AccessTokenExpireTimeSpan = TimeSpan.FromMinutes(tokenExpirationMinutes),
                 Provider = new CustomOAuthProvider(),
                 RefreshTokenProvider = new SimpleRefreshTokenProvider(),
-                AccessTokenFormat = new CustomJwtFormat("http://jwtauthzsrv.azurewebsites.net")
+                AccessTokenFormat = new CustomJwtFormat(WebConfigurationManager.AppSettings["TokenIssuer"])
             };
 
             // OAuth 2.0 Bearer Access Token Generation
